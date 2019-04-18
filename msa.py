@@ -1,7 +1,7 @@
 import os
 import sys
 
-from Bio.Align.Applications import ClustalOmegaCommandline
+# from Bio.Align.Applications import ClustalOmegaCommandline
 
 def main(argv):
 	# output file is the first argument
@@ -14,8 +14,13 @@ def main(argv):
 	os.system("cat " + in_files + " > " + cin_file)
 
 	# get clustal's command
-	clustalomega_cline = ClustalOmegaCommandline(infile=cin_file, outfile=out_file,
-							verbose=True, auto=True)
+# 	clustalomega_cline = ClustalOmegaCommandline(infile=cin_file, outfile=out_file,
+#							verbose=True, auto=True)
+
+	# hard-coded clustal's command in order
+	# to not use the library that is required
+	clustalomega_cline = "clustalo -i .cin -o " + out_file + " --auto -v"
+
 	# run clustal's command
 	os.system("./" + str(clustalomega_cline))
 
