@@ -1,6 +1,8 @@
 import sys
 import math
 
+from random import shuffle
+
 from queue import Queue
 from threading import Thread, Lock
 
@@ -239,21 +241,30 @@ def threaded_motif_sset(tid, pvect, intv_motif, len_motif=6,
 		len_of_segm = len_of_intv - offset_segm
 		len_of_segm = len_of_segm if len_of_segm > 0 else 0
 
+	# traverse this loop according to how the interval was
+	# divided between the threads,  how big each segment is
 	for i in range(len_of_segm):
 		size_of_motif	= 0			# size of temp motif
-		tmp_motifs	= [ motif ]
-		new_motifs	= []
+		tmp_motifs	= [ motif ]		# temporary motifs
+		new_motifs	= []			# new temporary motifs
 
+		# go through the pvect len_motif times
+		# hoping we will find a big enough motif
 		for j in range(len_motif):
+			# check if index_char still exists
 			index_char = intv_motif[0] + offset_segm + j
 			if (index_char > intv_motif[1]):
 				break
 
+			# for the different characters of the alphabet
+			# at the index 'index_char' of pvect
 			for k in pvect[index_char]:
 				if DEBUG:
 					print("> Thread : " + str(tid) + " : " +
 						str(i) + " : " + str(j) + " : " + str(k))
 
+				# go through each previous motif and append to it
+				# the different characters, to the previous motifs
 				for old_motif in tmp_motifs:
 					new_motif = old_motif
 
@@ -273,6 +284,11 @@ def threaded_motif_sset(tid, pvect, intv_motif, len_motif=6,
 		print()
 
 	results[tid] = motifs
+
+def pairs_of_distance(tid, motifs, distance):
+	'''
+	distance of two scores = abs(d1 - d2)
+	'''
 
 # nucleotide motif discovery through profile matrix
 def nucleotide_modis(sequences, len_motif=6, max_motifs=3, p_threshold=0.8):
@@ -356,6 +372,10 @@ def nucleotide_modis(sequences, len_motif=6, max_motifs=3, p_threshold=0.8):
 			motifs += result
 
 	if DEBUG:
+		if (max_motifs > -1):
+			shuffle(motifs)
+			motifs = motifs[0:max_motifs]
+
 		print("> Motifs : \n" + str(motifs))
 		print()
 
