@@ -114,7 +114,8 @@ def anchored_pmatt_fltr(tid, pmatt, p_threshold, size_vect=0):
 			subset_div = [ val for val in
 						# go through probability at column of index
 						[ (index_row, pmatt[index_row][index_col])
-							for index_row in pmatt.keys() ]
+							for index_row in pmatt.keys()
+							if index_col < len(pmatt[index_row]) ]
 
 						# go through the probability of the chars
 						# that are greater than the p_threshold
