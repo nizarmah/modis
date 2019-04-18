@@ -74,7 +74,7 @@ def sequential_pmatt_intr(pmatt, p_threshold, len_motif=6,
 			elif (motif[2] == len_motif and			# motif is len required
 				pmatt[character][i] < p_threshold):	# char prob < threshold
 				motifs.append((motif[0], motif[1]))	# save motif in list
-				motif = [ "", 0, 0 ]			# reset motif
+				motif = [ "", 1, 0 ]			# reset motif
 
 			else:
 				motif[0] += character			# append char to motif
