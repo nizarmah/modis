@@ -6,7 +6,7 @@ from threading import Thread, Lock
 
 DEBUG		= True	# DEBUG Mode - Printing
 
-mutex 		= {}
+mutex 		= {}	# mutex locks
 
 num_threads 	= 0	# number of available threads
 threads		= []	# vector of threads
@@ -81,8 +81,10 @@ def threaded_pmatt_calc(tid, sequences, pmatt, alphabet=[ "A", "G", "T", "C" ],
 
 		if DEBUG:
 			if i == 0 or i == (len_of_segm - 1):
-				print(str(tid) + " : " + str(i) +
+				print("> Thread : " + str(tid) + " : " +
+					("Start" if i == 0 else " End ") +
 					" : " + str((index_seq, index_char)))
+				if i == (len_of_segm - 1): print()
 
 		# specify which sequence we are working on
 		sequence = sequences[index_seq]
@@ -106,13 +108,14 @@ def sequential_pmatt_intr(pmatt, p_threshold, len_motif=6,
 	keep saving the subsets as long as all the characters in it
 	have a probability > p_threshold, if not save the subset and its score
 
+	example:
 	score(AGT) = p(A) * p(G) * p(T) / (1/4)**3
 	'''
 
-	motif		= [ "", 0, 0 ]	# motif [ sequence, score, length ]
-	motifs		= {}		# dictionary of motifs
+	motif		= [ "", 1, 0 ]				# [ sequence, score, length ]
+	motifs		= []					# list of motifs
 
-	size_alph	= len(pmatt)	# alphabet size
+	size_alph	= len(pmatt)				# alphabet size
 
 	# go over the msa profile matrix
 	# get probability of each character at an index
@@ -124,7 +127,7 @@ def sequential_pmatt_intr(pmatt, p_threshold, len_motif=6,
 
 			elif (motif[2] == len_motif and			# motif is len required
 				pmatt[character][i] < p_threshold):	# char prob < threshold
-				motifs[motif[0]] = motif[1]		# save motif in dict
+				motifs.append((motif[0], motif[1]))	# save motif in list
 				motif = [ "", 0, 0 ]			# reset motif
 
 			else:
@@ -135,7 +138,7 @@ def sequential_pmatt_intr(pmatt, p_threshold, len_motif=6,
 
 	# if loop ends with an unappended motif of required len
 	if motif[2] == len_motif:
-		motifs[motif[0]] = motif[1]
+		motifs.append((motif[0], motif[1]))
 		motif = [ "", 0, 0 ]
 
 	return motifs
@@ -175,19 +178,101 @@ def anchored_pmatt_fltr(tid, pmatt, p_threshold, size_vect=0):
 
 	results[tid] = div
 
-def threaded_pmatt_intr(pmatt, p_threshold, len_motif=6,
-				size_vect=0, size_matt=0):
+def advanced_pmatt_intr(pvect, len_motif=6, size_vect=0):
 	'''
 	dividing and conquering the sequence, then merging is a possible solution
 	however its speedup is not as significant as expected, as the worst case
 	would be having to redo the sequential code in steps
 
-	so, we will anchor the thresholds < p_threshold in the bottom, and keep
-	the characters that are above the threshold as possible permutations
-	by dividing the columns across the threads and each anchoring each
-
-	then we will cross that list once and collect all possible permutations
+	so we will take the pvect and keep the segments that have the desired length
+	through keeping track of their start and their end
 	'''
+
+	intv_motif	= [ -1, -1 ]			# interval motif [ start, end ]
+	intv_motifs	= []				# list of intervals of motifs
+
+	for index_char in pvect.keys():
+		if (intv_motif[0] == -1):		# if interval starts at -1
+			intv_motif[0] = index_char	# start setting interval
+		elif (intv_motif[1] == -1 and index_char ==
+			(intv_motif[0] + 1)):		# if interval has consecutive
+			intv_motif[1] = index_char	# add first consecutive as end
+		elif (intv_motif[1] > -1 and index_char ==
+			(intv_motif[1] + 1)):		# end of intv has consecutive
+			intv_motif[1] = index_char	# checkpoint as new end
+		elif (index_char >
+			(intv_motif[1] + 1)):		# if interval not consecutive
+			if ((intv_motif[1] - intv_motif[0] + 1)
+					>= len_motif):	# if interval > len of motif
+				intv_motifs.append(	# save the interval in list
+					(intv_motif[0], intv_motif[1]))
+
+			intv_motif = [ -1, -1 ]
+
+	if DEBUG:
+		print("> Possible Indeces of Motif Sequences : \n" +
+				str(intv_motifs))
+
+	return intv_motifs
+
+def threaded_motif_sset(tid, pvect, intv_motif, len_motif=6,
+				size_vect=0, size_alph=4):
+	'''
+	first of all get the intervals of possible motifs from advanced_pmatt_intr
+
+	after that we will use the threads to compute all possible subsets of motifs
+	since the worst case we have if all the sequence itself is considered as one
+	because it is highly conserved, and it's easier to traverse all other indeces
+	'''
+	motif		= [ "", 1, 0 ]			# [ sequence, score, length ]
+	motifs		= []				# list of chosen motifs
+
+	len_of_intv	= (intv_motif[1] -		# length of the interval
+				intv_motif[0] + 1)
+	len_of_segm	= math.ceil(len_of_intv
+					/ num_threads)	# thread segment length
+	offset_segm	= len_of_segm * tid		# segment start offset
+
+	# if this is last thread, then only iterate over
+	# remaining length of all the segments of sequences
+	if tid == (num_threads - 1):
+		len_of_segm = len_of_intv - offset_segm
+		len_of_segm = len_of_segm if len_of_segm > 0 else 0
+
+	for i in range(len_of_segm):
+		size_of_motif	= 0			# size of temp motif
+		tmp_motifs	= [ motif ]
+		new_motifs	= []
+
+		for j in range(len_motif):
+			index_char = intv_motif[0] + offset_segm + j
+			if (index_char > intv_motif[1]):
+				break
+
+			for k in pvect[index_char]:
+				if DEBUG:
+					print("> Thread : " + str(tid) + " : " +
+						str(i) + " : " + str(j) + " : " + str(k))
+
+				for old_motif in tmp_motifs:
+					new_motif = old_motif
+
+					new_motif[0] += k[0]
+					new_motif[1] *= (k[1] / (1 / size_alph))
+					new_motif[2] += 1
+
+					size_of_motif += 1
+					new_motifs.append(new_motif)
+				tmp_motifs = new_motifs
+				new_motifs = []
+
+		if size_of_motif == len_motif:
+			motifs += tmp_motifs
+
+	if DEBUG:
+		print()
+
+	results[tid] = motifs
 
 # nucleotide motif discovery through profile matrix
 def nucleotide_modis(sequences, len_motif=6, max_motifs=3, p_threshold=0.8):
@@ -199,10 +284,12 @@ def nucleotide_modis(sequences, len_motif=6, max_motifs=3, p_threshold=0.8):
 
 	size_matt	= len(sequences)    	# matrix size of all sequences
 	size_vect	= len(sequences[0]) 	# vector size of all sequences
+	size_alph	= len(alphabet)		# alphabet size of all characters
 
 	if DEBUG:
 		print("size_vect : " + str(size_vect))
 		print("size_matt : " + str(size_matt))
+		print()
 
 	''' sequential code
 	sequential_pmatt_calc(sequences, pmatt, alphabet=alphabet,
@@ -231,7 +318,8 @@ def nucleotide_modis(sequences, len_motif=6, max_motifs=3, p_threshold=0.8):
 		thread.join()
 
 	if DEBUG:
-		print("\n> Probability Matrix : \n" + str(pmatt))
+		print("> Probability Matrix : \n" + str(pmatt))
+		print()
 
 	pvect		= {}			# probability vector
 
@@ -247,10 +335,29 @@ def nucleotide_modis(sequences, len_motif=6, max_motifs=3, p_threshold=0.8):
 		if result: pvect.update(result)
 
 	if DEBUG:
-		print("\n> Anchored Probability Vector : \n" + str(pvect))
+		print("> Anchored Probability Vector : \n" + str(pvect))
+		print()
 
-#	if DEBUG:
-#		print("\n> Motifs : \n" + str(motifs))
+	intv_motifs	= advanced_pmatt_intr(pvect,
+				len_motif=len_motif, size_vect=size_vect)
+
+	motifs		= []			# list of motifs
+	for intv_motif in intv_motifs:
+		for tid in range(num_threads):
+			threads[tid] = Thread(target=threaded_motif_sset,
+				args=(tid, pvect, intv_motif),
+				kwargs=dict(len_motif=len_motif,
+					size_vect=size_vect, size_alph=size_alph))
+			threads[tid].start()
+
+		for thread in threads:
+			thread.join()
+		for result in results:
+			motifs += result
+
+	if DEBUG:
+		print("> Motifs : \n" + str(motifs))
+		print()
 
 def main(argv):
 	in_file		= argv[0] 		# input file of fastas after MSA
