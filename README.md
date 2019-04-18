@@ -1,7 +1,9 @@
 # modis
 
 ```python
-python msa.py .out fasta/test_1.py
+sh preq.sh
 
-python modis.py .out 4 6 3 0.1
+python3 msa.py .out fasta/test_1.py
+
+python3 modis.py .out 4 3 3 0.5
 ```
