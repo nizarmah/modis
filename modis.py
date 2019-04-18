@@ -214,6 +214,7 @@ def advanced_pmatt_intr(pvect, len_motif=6, size_vect=0):
 	if DEBUG:
 		print("> Possible Indeces of Motif Sequences : \n" +
 				str(intv_motifs))
+		print()
 
 	return intv_motifs
 
@@ -285,13 +286,48 @@ def threaded_motif_sset(tid, pvect, intv_motif, len_motif=6,
 
 	results[tid] = motifs
 
-def pairs_of_distance(tid, motifs, distance):
+def pairs_of_distance(tid, motifs, m_distance, e_tolerance=0.05):
 	'''
 	distance of two scores = abs(d1 - d2)
 	'''
 
+	size_motifs	= len(motifs)			# size of motifs
+	distant_motifs	= []				# coll of distant motifs
+
+	len_of_segm	= math.ceil(size_motifs
+					/ num_threads)	# thread segment length
+	offset_segm	= len_of_segm * tid		# segment start offset
+
+	# if this is last thread, then only iterate over
+	# remaining length of all the segments of sequences
+	if tid == (num_threads - 1):
+		len_of_segm = size_motifs - offset_segm
+
+	# go over the segment for this thread
+	for i in range(len_of_segm):
+		# if index is greater than list, stop
+		index_motif = offset_segm + i
+		if index_motif == (size_motifs - 1):
+			break
+
+		# check every motif after this motif
+		# and get the distance between them
+		for other_motif in \
+				range(index_motif + 1, size_motifs):
+			tmp_distance = abs(motifs[index_motif][1] -
+					motifs[other_motif][1])
+
+			# if distance is as required, append
+			if math.isclose(m_distance, tmp_distance,
+					rel_tol=e_tolerance, abs_tol=0.0):
+				distant_motifs.append((motifs[index_motif],
+						motifs[other_motif]))
+
+	results[tid] = distant_motifs
+
 # nucleotide motif discovery through profile matrix
-def nucleotide_modis(sequences, len_motif=6, max_motifs=3, p_threshold=0.8):
+def nucleotide_modis(sequences, len_motif=6, max_motifs=3,
+		p_threshold=0.8, m_distance=2, e_tolerance=0.05):
 	alphabet	= [ "A", "G", "T", "C" ]
 
 	pmatt		= {}			# probability matrix
@@ -372,11 +408,28 @@ def nucleotide_modis(sequences, len_motif=6, max_motifs=3, p_threshold=0.8):
 			motifs += result
 
 	if DEBUG:
-		if (max_motifs > -1):
-			shuffle(motifs)
-			motifs = motifs[0:max_motifs]
+		print("> Motifs : \n"+ str(motifs))
+		print()
 
-		print("> Motifs : \n" + str(motifs))
+	for tid in range(num_threads):
+		threads[tid] = Thread(target=pairs_of_distance,
+				args=(tid, motifs, m_distance),
+				kwargs=dict(e_tolerance=e_tolerance))
+		threads[tid].start()
+
+	for thread in threads:
+		thread.join()
+	distant_motifs = []
+	for result in results:
+		if result:
+			distant_motifs += result
+
+	if DEBUG:
+		if (max_motifs > -1):
+			shuffle(distant_motifs)
+			distant_motifs = distant_motifs[0:max_motifs]
+
+		print("> Distant Motifs : \n" + str(distant_motifs))
 		print()
 
 def main(argv):
@@ -388,12 +441,14 @@ def main(argv):
 	len_motif	= int(argv[2])		# number of characters in motif
 	max_motifs	= int(argv[3])		# maximum number of motifs
 	p_threshold	= float(argv[4])	# probability matt item min threshold
+	m_distance	= float(argv[5])	# metric distance between pairs
+	e_tolerance	= float(argv[6])	# error tolerance for the distance
 
 	# read aligned fasta from input file
 	sequences = readfasta(in_file)
 
-	nucleotide_modis(sequences, len_motif=len_motif,
-				max_motifs=max_motifs, p_threshold=p_threshold)
+	nucleotide_modis(sequences, len_motif=len_motif, max_motifs=max_motifs,
+		p_threshold=p_threshold, m_distance=m_distance, e_tolerance=e_tolerance)
 
 if __name__ == "__main__":
 	main(sys.argv[1:])
