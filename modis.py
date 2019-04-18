@@ -1,5 +1,6 @@
 import sys
 import math
+import time
 
 from random import shuffle
 
@@ -37,20 +38,6 @@ def readfasta(in_file):
 				sequence += line.strip()
 
 	return sequences[:]
-
-def sequential_pmatt_calc(sequences, pmatt, alphabet=[ "A", "G", "T", "C" ],
-				size_vect=0, size_matt=0):
-	'''
-	go through every index of each sequence and then
-	calculate the probability of each character at that index
-	'''
-	for i in range(size_vect):
-		for sequence in sequences:
-			if sequence[i] not in alphabet:
-				continue
-
-			# increase the probability of the alphabet character
-			pmatt[str(sequence[i])][i] += (1 / size_matt)
 
 def threaded_pmatt_calc(tid, sequences, pmatt, alphabet=[ "A", "G", "T", "C" ],
 				size_vect=0, size_matt=0):
@@ -102,48 +89,6 @@ def threaded_pmatt_calc(tid, sequences, pmatt, alphabet=[ "A", "G", "T", "C" ],
 			pmatt[str(sequence[index_char])][index_char] += (1 / size_matt)
 		finally:
 			mutex[str(sequence[index_char])][index_char].release()
-
-def sequential_pmatt_intr(pmatt, p_threshold, len_motif=6,
-				size_vect=0, size_matt=0):
-	'''
-	start from each character index and try all subsets until end
-	keep saving the subsets as long as all the characters in it
-	have a probability > p_threshold, if not save the subset and its score
-
-	example:
-	score(AGT) = p(A) * p(G) * p(T) / (1/4)**3
-	'''
-
-	motif		= [ "", 1, 0 ]				# [ sequence, score, length ]
-	motifs		= []					# list of motifs
-
-	size_alph	= len(pmatt)				# alphabet size
-
-	# go over the msa profile matrix
-	# get probability of each character at an index
-	for i in range(size_vect):
-		for character in pmatt.keys():
-			if (motif[2] == 0 and				# motif is empty
-				pmatt[character][i] < p_threshold):	# char prob < threshold
-				continue				# ignore character
-
-			elif (motif[2] == len_motif and			# motif is len required
-				pmatt[character][i] < p_threshold):	# char prob < threshold
-				motifs.append((motif[0], motif[1]))	# save motif in list
-				motif = [ "", 0, 0 ]			# reset motif
-
-			else:
-				motif[0] += character			# append char to motif
-				motif[1] *= (pmatt[character][i]
-						/ (1 / size_alph))	# increase motif score
-				motif[2] += 1				# increase motif len
-
-	# if loop ends with an unappended motif of required len
-	if motif[2] == len_motif:
-		motifs.append((motif[0], motif[1]))
-		motif = [ "", 0, 0 ]
-
-	return motifs
 
 def anchored_pmatt_fltr(tid, pmatt, p_threshold, size_vect=0):
 	'''
@@ -343,14 +288,6 @@ def nucleotide_modis(sequences, len_motif=6, max_motifs=3,
 		print("size_matt : " + str(size_matt))
 		print()
 
-	''' sequential code
-	sequential_pmatt_calc(sequences, pmatt, alphabet=alphabet,
-	 			size_vect=size_vect, size_matt=size_matt)
-
-	motifs		= sequential_pmatt_intr(pmatt, p_threshold, len_motif,
-				size_vect=size_vect, size_matt=size_matt)
-	'''
-
 	for character in alphabet:
 		mutex[character] = [Lock()] * size_vect
 
@@ -358,6 +295,8 @@ def nucleotide_modis(sequences, len_motif=6, max_motifs=3,
 #	num_threads	= 0			# uncomment to stop parallelism
 	threads 	= [None] * num_threads	# vector of threads
 	results		= [None] * num_threads	# vector of results
+
+	start_time	= time.time()		# start time of execution time
 
 	for tid in range(num_threads):
 		threads[tid] = Thread(target=threaded_pmatt_calc,
@@ -431,6 +370,11 @@ def nucleotide_modis(sequences, len_motif=6, max_motifs=3,
 
 		print("> Distant Motifs : \n" + str(distant_motifs))
 		print()
+
+	end_time	= time.time()		# end time of execution time
+
+	if DEBUG:
+		print("> Time Taken : " + str(end_time - start_time))
 
 def main(argv):
 	in_file		= argv[0] 		# input file of fastas after MSA
