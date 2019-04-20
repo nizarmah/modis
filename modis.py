@@ -83,6 +83,10 @@ def threaded_pmatt_calc(tid, sequences, pmatt, alphabet=[ "A", "G", "T", "C" ],
 		if sequence[index_char] not in alphabet:
 			continue
 
+		# while mutex is still locked, wait
+		while mutex[str(sequence[index_char])][index_char].locked:
+			continue
+
 		# acquire mutex for character_index
 		mutex[str(sequence[index_char])][index_char].acquire()
 		try:
