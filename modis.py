@@ -201,7 +201,6 @@ def threaded_motif_sset(tid, pvect, intv_motif, len_motif=6,
 		# go through the pvect len_motif times
 		# hoping we will find a big enough motif
 		for j in range(len_motif):
-			# check if index_char still exists
 			index_char = index_start + i
 
 			# for the different characters of the alphabet
