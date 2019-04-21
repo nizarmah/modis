@@ -195,7 +195,7 @@ def threaded_motif_sset(tid, pvect, intv_motif, len_motif=6,
 						i)	# start index in interval
 
 		if (intv_motif[1] -
-			index_start) < len_motif:
+			index_start + 1) < len_motif:	# +1 since both are included
 			break
 
 		# go through the pvect len_motif times
