@@ -4,24 +4,21 @@ import time
 
 from random import shuffle
 
-from queue import Queue
-from threading import Thread, Lock
+from multiprocessing import Process, Lock, Manager
 
-DEBUG		= True	# DEBUG Mode - Printing
+DEBUG		= True		# DEBUG Mode - Printing
 
-mutex 		= {}	# mutex locks
+num_threads 	= 0		# number of available threads
+threads		= []		# vector of threads
+results		= []
 
-num_threads 	= 0	# number of available threads
-threads		= []	# vector of threads
-results		= []	# vector of results of threads
+manager		= Manager()	# manager to comm all results
 
 # reads fasta from input file
-def readfasta(in_file):
+def readfasta(sequences, in_file):
 	'''
 	read the multiple sequence alignment that are in fasta format
 	'''
-	sequences = []
-
 	with open(in_file, "r") as file:
 		sequence = ""
 
@@ -37,62 +34,37 @@ def readfasta(in_file):
 			elif len(line) > 0:
 				sequence += line.strip()
 
-	return sequences[:]
-
-def threaded_pmatt_calc(tid, sequences, pmatt, alphabet=[ "A", "G", "T", "C" ],
+def threaded_pmatt_calc(tid, sequence, pmatt, alphabet=[ "A", "G", "T", "C" ],
 				size_vect=0, size_matt=0):
 	'''
-	divide the segments of the sequences
+	divide the sequence into segments
 	over the different num of threads ( size )
+	instead of dividing sequences into segments
+	that way we don't need mutex locks
 
-	each thread has a Start_Tuple and an Final_Tuple
-	each tuple -> ( Sequence Index, Character Index )
-
-	Number of Characters we have is (size_vect * size_matt), so:
-		- len_of_segment  = (size_vect * size_matt) / num_threads
+	so:
+		- len_of_segment  = size_vect / num_threads
 		- offset_segment  = len_of_segment * tid
-		- character_index = offset_segment % size_vect
-		- sequence_index  = (offset_segment - character_index) / size_vect
 	'''
 
-	len_of_segm	= math.ceil((size_vect * size_matt)
+	len_of_segm	= math.ceil(size_vect
 					/ num_threads)		# thread segment length
 	offset_segm	= len_of_segm * tid			# segment start offset
 
 	# if this is last thread, then only iterate over
 	# remaining length of all the segments of sequences
 	if tid == (num_threads - 1):
-		len_of_segm = (size_vect * size_matt) - offset_segm
+		len_of_segm = size_vect - offset_segm
 
 	for i in range(len_of_segm):
-		index_char	= (offset_segm + i) % size_vect
-		index_seq	= ((offset_segm + i) - index_char) // size_vect
-
-		if DEBUG:
-			if i == 0 or i == (len_of_segm - 1):
-				print("> Thread : " + str(tid) + " : " +
-					("Start" if i == 0 else " End ") +
-					" : " + str((index_seq, index_char)))
-				if i == (len_of_segm - 1): print()
-
-		# specify which sequence we are working on
-		sequence = sequences[index_seq]
+		index_char	= offset_segm + i
 
 		# check if the character at character_index
 		# is part of the alphabet or if it is not
 		if sequence[index_char] not in alphabet:
 			continue
 
-		# while mutex is still locked, wait
-		while mutex[str(sequence[index_char])][index_char].locked:
-			continue
-
-		# acquire mutex for character_index
-		mutex[str(sequence[index_char])][index_char].acquire()
-		try:
-			pmatt[str(sequence[index_char])][index_char] += (1 / size_matt)
-		finally:
-			mutex[str(sequence[index_char])][index_char].release()
+		pmatt[str(sequence[index_char])][index_char] += (1 / size_matt)
 
 def anchored_pmatt_fltr(tid, pmatt, p_threshold, size_vect=0):
 	'''
@@ -196,14 +168,14 @@ def threaded_motif_sset(tid, pvect, intv_motif, len_motif=6,
 	# divided between the threads,  how big each segment is
 	for i in range(len_of_segm):
 		size_of_motif	= 0			# size of temp motif
-		tmp_motifs	= [ motif ]		# temporary motifs
+		tmp_motifs	= [ motif[:] ]		# temporary motifs
 		new_motifs	= []			# new temporary motifs
 
 		# go through the pvect len_motif times
 		# hoping we will find a big enough motif
 		for j in range(len_motif):
 			# check if index_char still exists
-			index_char = intv_motif[0] + offset_segm + j
+			index_char = intv_motif[0] + offset_segm + j + i
 			if (index_char > intv_motif[1]):
 				break
 
@@ -212,7 +184,8 @@ def threaded_motif_sset(tid, pvect, intv_motif, len_motif=6,
 			for k in pvect[index_char]:
 				if DEBUG:
 					print("> Thread : " + str(tid) + " : " +
-						str(i) + " : " + str(j) + " : " + str(k))
+						str(i) + " : " + str(j) + " : " + str(k),
+						end="\r")
 
 				# go through each previous motif and append to it
 				# the different characters, to the previous motifs
@@ -230,9 +203,6 @@ def threaded_motif_sset(tid, pvect, intv_motif, len_motif=6,
 
 		if size_of_motif == len_motif:
 			motifs += tmp_motifs
-
-	if DEBUG:
-		print()
 
 	results[tid] = motifs
 
@@ -278,11 +248,9 @@ def pairs_of_distance(tid, motifs, m_distance, e_tolerance=0.05):
 # nucleotide motif discovery through profile matrix
 def nucleotide_modis(sequences, len_motif=6, max_motifs=3,
 		p_threshold=0.8, m_distance=2, e_tolerance=0.05):
-	alphabet	= [ "A", "G", "T", "C" ]
+	global manager
 
-	pmatt		= {}			# probability matrix
-	for character in alphabet:
-		pmatt[character] = [0] * len(sequences[0])
+	alphabet	= [ "A", "G", "T", "C" ]
 
 	size_matt	= len(sequences)    	# matrix size of all sequences
 	size_vect	= len(sequences[0]) 	# vector size of all sequences
@@ -293,34 +261,50 @@ def nucleotide_modis(sequences, len_motif=6, max_motifs=3,
 		print("size_matt : " + str(size_matt))
 		print()
 
+#	pmatt		= {}			# probability matrix
+	pmatt		= manager.dict()	# shared probability matrix
+
 	for character in alphabet:
-		mutex[character] = [Lock()] * size_vect
+# 		pmatt[character] = [0] * len(sequences[0])
+		pmatt[character] = manager.list([ 0 for i in range(size_vect) ])
 
 	global num_threads, threads, results	# getting global variables
 #	num_threads	= 0			# uncomment to stop parallelism
 	threads 	= [None] * num_threads	# vector of threads
-	results		= [None] * num_threads	# vector of results
+	results		= manager.list(range(
+				num_threads))	# manager list to store results
 
 	start_time	= time.time()		# start time of execution time
 
-	for tid in range(num_threads):
-		threads[tid] = Thread(target=threaded_pmatt_calc,
-			args=(tid, sequences, pmatt),
-			kwargs=dict(alphabet=alphabet,
-				size_vect=size_vect, size_matt=size_matt))
-		threads[tid].start()
+	# for each sequence, divide it across threads
+	# update the pmatt after traversing each sequence
+	tmp_sequence_id	= 0			# tmp sequence id to track them
+	for sequence in sequences:
+		tmp_sequence_id += 1
+		if DEBUG:
+			print("> Sequence : " + str(tmp_sequence_id) +
+				" : Left : " + str(size_matt -
+						tmp_sequence_id), end="\r")
 
-	for thread in threads:
-		thread.join()
+		for tid in range(num_threads):
+			threads[tid] = Process(target=threaded_pmatt_calc,
+				args=(tid, sequence, pmatt),
+				kwargs=dict(alphabet=alphabet,
+					size_vect=size_vect, size_matt=size_matt))
+			threads[tid].start()
 
+		for thread in threads:
+			thread.join()
 	if DEBUG:
+		print()
+		print()
+
 		print("> Probability Matrix : \n" + str(pmatt))
 		print()
 
 	pvect		= {}			# probability vector
-
 	for tid in range(num_threads):
-		threads[tid] = Thread(target=anchored_pmatt_fltr,
+		threads[tid] = Process(target=anchored_pmatt_fltr,
 				args=(tid, pmatt, p_threshold),
 				kwargs=dict(size_vect=size_vect))
 		threads[tid].start()
@@ -340,7 +324,7 @@ def nucleotide_modis(sequences, len_motif=6, max_motifs=3,
 	motifs		= []			# list of motifs
 	for intv_motif in intv_motifs:
 		for tid in range(num_threads):
-			threads[tid] = Thread(target=threaded_motif_sset,
+			threads[tid] = Process(target=threaded_motif_sset,
 				args=(tid, pvect, intv_motif),
 				kwargs=dict(len_motif=len_motif,
 					size_vect=size_vect, size_alph=size_alph))
@@ -352,18 +336,21 @@ def nucleotide_modis(sequences, len_motif=6, max_motifs=3,
 			motifs += result
 
 	if DEBUG:
+		print()
+		print()
+
 		print("> Motifs : \n"+ str(motifs))
 		print()
 
+	distant_motifs	= []			# motifs of certain distance
 	for tid in range(num_threads):
-		threads[tid] = Thread(target=pairs_of_distance,
+		threads[tid] = Process(target=pairs_of_distance,
 				args=(tid, motifs, m_distance),
 				kwargs=dict(e_tolerance=e_tolerance))
 		threads[tid].start()
 
 	for thread in threads:
 		thread.join()
-	distant_motifs = []
 	for result in results:
 		if result:
 			distant_motifs += result
@@ -394,7 +381,9 @@ def main(argv):
 	e_tolerance	= float(argv[6])	# error tolerance for the distance
 
 	# read aligned fasta from input file
-	sequences = readfasta(in_file)
+#	sequences = readfasta(in_file)
+	sequences	= manager.list()	# manager sequences list
+	readfasta(sequences, in_file)
 
 	nucleotide_modis(sequences, len_motif=len_motif, max_motifs=max_motifs,
 		p_threshold=p_threshold, m_distance=m_distance, e_tolerance=e_tolerance)
