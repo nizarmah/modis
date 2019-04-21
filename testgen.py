@@ -1,28 +1,29 @@
-import os
 import sys
 import math
 import random
+import time
 
-from multiprocessing import Process
+from multiprocessing import Process, Queue
 
 DEBUG		= False
 
-num_processes	= 0
-processes	= []
-results		= []
+num_threads	= 0
+threads		= []
+queue		= None
 
 sequences	= {}
 
 def disco_shuffle(tid, size_vect, size_matt,
 			alphabet=["A","G","T","C"]):
 	tmp_results	= []
-	size_process	= int(math.ceil(size_matt / num_processes))
+	size_thread	= int(math.ceil(size_matt / num_threads))
 
+	start_time = time.time()
 	if DEBUG:
-		print("Processes " + str(tid) + " : Started : " +
-				str(size_process))
+		print("Thread : " + str(tid) + " : Started : " +
+				str(size_thread))
 
-	for i in range(size_process):
+	for i in range(size_thread):
 		str_seq = ""
 		for j in range(size_vect):
 			str_seq += random.choice(alphabet)
@@ -34,36 +35,44 @@ def disco_shuffle(tid, size_vect, size_matt,
 #			sequences[str_seq] = 1
 		tmp_results.append(str_seq)
 
-	if DEBUG:
-		print("Processes " + str(tid) + " : Ended")
+	queue.put(tmp_results)
 
-	return tmp_results
+	end_time = time.time()
+	if DEBUG:
+		print("Thread : " + str(tid) + " : Ended : " +
+				str(end_time - start_time))
 
 def main(argv):
-	global num_processes, processes, results
-	num_processes	= int(argv[0])	# number of processes
-	processes	= [None] * num_processes
-	results		= [[]] * num_processes
+	global num_threads, threads, queue
+	num_threads	= int(argv[0])	# number of threads
+	threads		= [None] * num_threads
+	queue		= Queue()
 
 	size_vect	= int(argv[1])	# size of a single sequence
 	size_matt	= int(argv[2])	# number of sequences
 
-	alphabet	= [ "A", "C", "G", "T" ]
+	alphabet	= [ "A", "G", "T", "C" ]
 
 	global sequences
 	sequences	= {}
-	for pid in range(num_processes):
-		processes[pid] = Process(target=disco_shuffle,
-				args=(pid, size_vect, size_matt),
+
+	global DEBUG
+	try:
+		DEBUG 	= argv[3]	# optional debug parameter
+	except: pass
+
+	for tid in range(num_threads):
+		threads[tid] = Process(target=disco_shuffle,
+				args=(tid, size_vect, size_matt),
 				kwargs=dict(alphabet=alphabet))
-		processes[pid].start()
+		threads[tid].start()
 
-	for process in processes:
-		process.join()
+#	for thread in threads:
+#		thread.join()
 
-
-	for result in results:
-		for row in result:
+	for thread in threads:
+		res = queue.get()
+		for row in res:
 			print(">")
 			print(row)
 
