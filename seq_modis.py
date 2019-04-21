@@ -167,14 +167,11 @@ def nucleotide_modis(sequences, len_motif=6, max_motifs=3,
 def main(argv):
 	in_file		= argv[0] 		# input file of fastas after MSA
 
-	global num_threads			# prevents creation of local var
-	num_threads	= int(argv[1]) 		# number of threads
-
-	len_motif	= int(argv[2])		# number of characters in motif
-	max_motifs	= int(argv[3])		# maximum number of motifs
-	p_threshold	= float(argv[4])	# probability matt item min threshold
-	m_distance	= float(argv[5])	# metric distance between pairs
-	e_tolerance	= float(argv[6])	# error tolerance for the distance
+	len_motif	= int(argv[1])		# number of characters in motif
+	max_motifs	= int(argv[2])		# maximum number of motifs
+	p_threshold	= float(argv[3])	# probability matt item min threshold
+	m_distance	= float(argv[4])	# metric distance between pairs
+	e_tolerance	= float(argv[5])	# error tolerance for the distance
 
 	# read aligned fasta from input file
 	sequences = readfasta(in_file)
