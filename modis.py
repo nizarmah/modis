@@ -155,7 +155,7 @@ def advanced_pmatt_intr(pvect, len_motif=6, size_vect=0):
 			(intv_motif[0], intv_motif[1]))
 
 	if DEBUG:
-		print("> Possible Indeces of Motif Sequences : \n" +
+		print("> Possible Indices of Motif Sequences : \n" +
 				str(intv_motifs))
 		print()
 
