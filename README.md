@@ -22,17 +22,21 @@ While the `testgen.py` test generator has been also parallelized, the `msa.py` m
 python3 testgen.py 10 1000000 1000 > fasta/test_2.py
 ```
 ##### Arguments:
-- 10      : number of processors
-- 1000000 : nucleotide sequence length
-- 1000    : number of nucleotide sequences
+argument | example | name
+-------- | -------- | --------
+1 | 10 | number of processors
+2 | 1000000 | nucleotide sequence length
+3 | 1000 | number of nucleotide sequences
 
 #### Performing MSA:
 ```bash
 python3 msa.py .out fasta/test_2.py
 ```
 ##### Arguments:
-- .out                  : output file
-- fasta/test_2.py, ...  : input files
+argument | example | name
+-------- | -------- | --------
+1 | .out | output file
+2+ | fasta/test_2.py | input files
 
 > Please note, this is serial. It is done by running ClustalOmega on the fastas. If your sequences are of the same length and you prefer not wasting your time running this, then don't.
 
@@ -41,13 +45,15 @@ python3 msa.py .out fasta/test_2.py
 python3 modis.py .out 64 10 20 0.3 100 0.05
 ```
 ##### Arguments:
-- .out  : input file
-- 64    : number of processors
-- 10    : motif length
-- 20    : max number of motifs in result
-- 0.3   : nucleotide probability threshold
-- 100   : distance between motifs
-- 0.05  : percentage of accepted error in distance
+argument | example | name
+-------- | -------- | --------
+1 | .out | input file
+2 | 64 | number of processors
+3 | 10 | motif length
+4 | 20 | max number of motifs in result
+5 | 0.3 | nucleotide probability threshold
+6 | 100 | distance between motifs
+7 | 0.05 | percentage of accepted error in distance
 
 ### Test Results:
 
