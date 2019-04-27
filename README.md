@@ -1,6 +1,6 @@
 # modis
 
-> In case you are interested, you can open the [project report](https://www.overleaf.com/read/hqqbnjkrsvzy).
+> In case you are interested, you can open the [project report](https://drive.google.com/file/d/1KHQZ-7Arg-fJZKNADx3-oKqo9ZlHKP1L/view?usp=sharing).
 
 The reason behind this project is to create my own parallelized enumeration algorithm for all ungapped nucleotide sequence motifs in a set of sequences.
 While the `testgen.py` test generator has been also parallelized, the `msa.py` multiple sequence alignment, which uses ClustalOmega, has not been parallelized, as it is not in the scope of this project.
