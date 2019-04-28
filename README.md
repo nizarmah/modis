@@ -6,16 +6,12 @@ The reason behind this project is to create my own parallelized enumeration algo
 While the `testgen.py` test generator has been also parallelized, the `msa.py` multiple sequence alignment, which uses ClustalOmega, has not been parallelized, as it is not in the scope of this project.
 
 ### My Approach:
-1. Divide the profile matrix over threads by columns
- 
-2. Distribute the profile matrix by columns over threads, and anchor/drop all the probabilities that are less than a certain threshold to the bottom.
- 
-3. Identify the ranges of indices that contain an ungapped sequence, possible motif, of the requested length or more.
- 
-4. Distribute each range across multiple threads in order to enumerate all possible sub-sets of required length.
- 
-5. In an embarrassingly parallel way, calculate the distance between each pair.
-
+The approach we used is load balancing of threads with shared memory. It consists of multiple steps, which are:
+1. Create the profile matrix by dividing its columns among the available threads, with each thread going over all the sequences at the assigned indices for the thread;
+2. Anchoring the probabilities that are below a certain threshold, in order to create a probability vector which contains at each index the character(s) that has a probability greater than the threshold;
+3. Identify the ranges of indices that represent ungapped sub-sequences, which are at least of the required motif length or greater;
+4. Distribute the threads among subsets of each range of size similar to the length of the requested motif. That way we can get every possible motif starting from each possible index in that range and continuing until its length is as the length required. Each motif will have a scoring of 1, when empty, and it will be multiplied by `p(char)/(1/len(alphabet))`;
+5. Calculate the distance between each pair of motifs by taking the absolute value of their difference, `abs(score(motif1)-score(motif2))`. Then keep only the motifs that are approximately distant apart by a metric _d_ with a percentage error of _e_.
 
 ### How to Run:
 
